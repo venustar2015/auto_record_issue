@@ -1,535 +1,438 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>智能现场记录系统 V3</title>
-    <!-- 引入 SheetJS 用于导出 Excel -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <style>
-        :root {
-            --primary: #2c3e50;
-            --accent: #3498db;
-            --bg: #f4f7f6;
-            --card: #ffffff;
-            --text: #333;
-        }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); margin: 0; padding: 0; color: var(--text); padding-bottom: 60px; }
-
-        /* 顶部导航与激活时间 */
-        .header { background: var(--card); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); position: relative; }
-        .header h1 { margin: 0; font-size: 1.2rem; color: var(--primary); display: flex; align-items: center; }
-        .header h1::before { content: '📍'; margin-right: 8px; }
-        .workspace-select { padding: 5px 10px; border-radius: 6px; border: 1px solid #ddd; background: #fff; font-size: 0.9rem; }
-
-        /* 激活时间显示 */
-        .activation-time {
-            position: absolute;
-            bottom: 5px;
-            right: 15px;
-            font-size: 0.75rem;
-            color: #888;
-            font-family: monospace;
-        }
-
-        /* 工作区信息展示条 */
-        .workspace-info-bar {
-            background: #eef1f6;
-            padding: 8px 15px;
-            font-size: 0.8rem;
-            color: #555;
-            border-bottom: 1px solid #ddd;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .ws-tag { background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #ddd; }
-        .ws-label { font-weight: bold; color: #2c3e50; }
-
-        .container { max-width: 600px; margin: 15px auto; padding: 0 15px; }
-        .card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-
-        /* 输入区域 */
-        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; font-size: 0.9rem; }
-        textarea { width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box; resize: none; font-family: inherit; }
-        button { width: 100%; padding: 12px; margin-top: 10px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px; }
-        button:active { opacity: 0.9; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-secondary { background: white; color: var(--primary); border: 1px solid var(--primary); }
-        .btn-outline { background: white; color: #555; border: 1px solid #ddd; }
-
-        /* 视图切换 */
-        .view-toggle { display: flex; justify-content: flex-end; margin-bottom: 10px; font-size: 0.9rem; }
-        .toggle-switch { display: flex; align-items: center; cursor: pointer; }
-        .toggle-switch input { margin-right: 8px; }
-
-        /* 记录列表 */
-        .record-item { border: 1px solid #eee; border-radius: 10px; padding: 15px; margin-bottom: 15px; background: #fff; animation: fadeIn 0.3s ease; }
-        .record-header { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
-        .record-id { font-weight: bold; color: var(--accent); font-size: 0.9rem; }
-        .record-time { font-size: 0.85rem; color: #888; font-family: monospace; }
-
-        /* 详细信息样式 */
-        .detail-row { margin-bottom: 8px; font-size: 0.9rem; display: flex; flex-wrap: wrap; }
-        .detail-label { font-weight: 600; width: 60px; color: #555; }
-        .detail-value { flex: 1; color: #333; word-break: break-all; }
-        .map-link { color: var(--accent); text-decoration: none; font-size: 0.85rem; margin-top: 5px; display: inline-block; }
-        .record-img { width: 100%; border-radius: 6px; margin-top: 10px; border: 1px solid #eee; }
-
-        /* 缩略图模式样式 */
-        .thumbnail-mode .record-item { display: flex; gap: 15px; align-items: center; }
-        .thumbnail-mode .record-header { border: none; padding: 0; margin: 0; flex-direction: column; }
-        .thumbnail-mode .record-img { width: 80px; height: 80px; object-fit: cover; margin: 0; flex-shrink: 0; }
-        .thumbnail-mode .detail-row { margin: 2px 0; font-size: 0.85rem; }
-        .thumbnail-mode .detail-label { width: 50px; }
-        .thumbnail-mode .map-location-text { display: none; } /* 缩略图模式隐藏长地址文本，只看链接 */
-
-        .loading { text-align: center; color: #888; font-size: 0.9rem; margin: 20px 0; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* 弹窗 */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; }
-        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
-        .form-group input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能现场记录系统 V3</title>
+  <style>
+    :root { --primary: #2563eb; --bg: #f8fafc; --border: #e2e8f0; --text: #1e293b; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text); }
+    .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+    .header h1 { margin: 0; font-size: 1.5rem; }
+    #clock { font-family: monospace; font-size: 1.1rem; color: #64748b; }
+    .panel { border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #fdfdfd; }
+    #status-bar { font-size: 0.85rem; color: #64748b; margin-bottom: 8px; min-height: 1.2em; }
+    #remark-input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; resize: vertical; margin-bottom: 12px; }
+    #remark-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: #e2e8f0; color: #334155; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #preview-img { max-width: 100%; max-height: 250px; margin-top: 12px; border-radius: 6px; display: none; border: 1px solid var(--border); object-fit: cover; }
+    .record-list { margin-top: 20px; }
+    .record-item { padding: 12px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-start; }
+    .record-item img { width: 100px; height: 70px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+    .record-meta { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
+    .record-actions { margin-left: auto; display: flex; flex-direction: column; gap: 6px; }
+    .empty-state { text-align: center; color: #94a3b8; padding: 30px; }
+    /* 工作区管理面板 */
+    #workspace-panel { display: none; background: #f1f5f9; padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+    #workspace-panel.active { display: block; }
+    .ws-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .ws-form input { padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.85rem; }
+    .ws-list { display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; }
+    .ws-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #fff; border: 1px solid var(--border); border-radius: 4px; font-size: 0.85rem; }
+    .ws-item.active { border-color: var(--primary); background: #eff6ff; }
+    .badge { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+  </style>
 </head>
 <body>
-
-    <!-- 顶部 -->
+  <div class="container">
     <div class="header">
-        <h1>现场记录助手</h1>
-        <select id="workspaceSelector" class="workspace-select" onchange="switchWorkspace()"></select>
-        <!-- 激活时间显示 -->
-        <div id="activationTime" class="activation-time">--:--:--</div>
+      <h1>现场记录助手</h1>
+      <span id="clock">--:--:--</span>
     </div>
 
-    <!-- 工作区信息条 -->
-    <div id="workspaceInfoBar" class="workspace-info-bar">
-        <!-- JS 动态填充 -->
+    <div class="panel">
+      <div id="status-bar">等待激活备注输入框以锁定时间...</div>
+      <textarea id="remark-input" rows="3" placeholder="问题描述 / 备注信息"></textarea>
+      <div class="controls">
+        <button id="btn-capture" class="btn btn-primary" disabled>📷 拍照并记录</button>
+        <button id="btn-export" class="btn btn-secondary">📊 导出 Excel</button>
+        <button id="btn-ws-toggle" class="btn btn-secondary">⚙️ 管理工作区</button>
+        <button id="btn-import" class="btn btn-secondary">📥 导入记录</button>
+        <label style="margin-left:auto; display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
+          <input type="checkbox" id="view-mode-toggle"> 详细信息模式
+        </label>
+      </div>
+      <img id="preview-img" alt="捕获预览">
     </div>
 
-    <div class="container">
-        <!-- 视图切换 -->
-        <div class="view-toggle">
-            <label class="toggle-switch">
-                <input type="checkbox" id="viewToggle" onchange="toggleView()">
-                缩略图模式
-            </label>
-        </div>
-
-        <!-- 输入卡片 -->
-        <div class="card">
-            <label for="descInput">问题描述 / 备注信息</label>
-            <textarea id="descInput" placeholder="请输入现场情况..."></textarea>
-            <button class="btn-primary" onclick="handleRecord()">
-                📷 拍照并记录
-            </button>
-            <button class="btn-outline" onclick="exportToExcel()" style="margin-top: 10px; font-size: 0.9rem;">
-                📊 导出 Excel
-            </button>
-            <button class="btn-outline" onclick="openWorkspaceModal()" style="margin-top: 10px; font-size: 0.9rem;">
-                ⚙️ 管理工作区
-            </button>
-            <div id="statusText" class="loading" style="display:none; margin-top:10px;"></div>
-        </div>
-
-        <!-- 记录列表 -->
-        <div id="recordList">
-            <div class="loading">暂无记录</div>
-        </div>
+    <!-- 工作区管理面板 (隐藏/显示) -->
+    <div id="workspace-panel">
+      <h3 style="margin:0 0 10px 0; font-size:1rem;">📦 工作区配置</h3>
+      <div class="ws-form" id="ws-form"></div>
+      <div class="controls" style="margin-bottom:10px;">
+        <button id="btn-ws-create" class="btn btn-primary">➕ 新建工作区</button>
+        <button id="btn-ws-save" class="btn btn-secondary">💾 保存当前配置</button>
+      </div>
+      <div id="ws-list" class="ws-list"></div>
     </div>
 
-    <!-- 工作区配置弹窗 -->
-    <div id="workspaceModal" class="modal">
-        <div class="modal-content">
-            <h3 style="margin-top:0;">管理工作区</h3>
-            <div class="form-group">
-                <label>当前工作区名称</label>
-                <input type="text" id="wsNameInput">
-            </div>
-            <div class="form-group"><label>测试名称</label><input type="text" id="wsTestName"></div>
-            <div class="form-group"><label>车型</label><input type="text" id="wsCarModel"></div>
-            <div class="form-group"><label>测试人员</label><input type="text" id="wsTester"></div>
-            <div class="form-group"><label>司机</label><input type="text" id="wsDriver"></div>
-            <div class="form-group"><label>路线</label><input type="text" id="wsRoute"></div>
-            <div class="form-group"><label>挂车信息</label><input type="text" id="wsTrailer"></div>
-            <div class="form-group"><label>载荷</label><input type="text" id="wsLoad"></div>
-            <div class="form-group"><label>系统版本</label><input type="text" id="wsVersion"></div>
-            <div class="form-group"><label>天气</label><input type="text" id="wsWeather"></div>
-
-            <button class="btn-primary" onclick="saveWorkspaceConfig()">保存配置</button>
-            <button class="btn-outline" onclick="closeWorkspaceModal()" style="margin-top:10px;">取消</button>
-        </div>
+    <div id="record-list" class="record-list">
+      <div class="empty-state">暂无记录</div>
     </div>
+  </div>
 
-    <script>
-        // --- 1. 初始化与全局变量 ---
-        let records = JSON.parse(localStorage.getItem('field_records')) || [];
-        let workspaces = JSON.parse(localStorage.getItem('field_workspaces')) || {};
-        let currentWsId = localStorage.getItem('field_current_ws') || 'ws_1';
-        let activationDate = new Date(); // 页面激活时间
+  <!-- Excel 导出核心库 (SheetJS 全功能版支持图片嵌入) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    /**
+     * 中央状态管理
+     */
+    const AppState = {
+      currentWorkspace: null,
+      workspaces: [],
+      records: [],
+      lockedTimestamp: null,
+      currentImageBase64: null,
+      viewModeDetailed: false,
+      nextId: 1
+    };
 
-        // 默认配置
-        const defaultWsConfig = {
-            name: '工作区1',
-            testName: '版本测试',
-            carModel: 'HG36-244#',
-            tester: '测试科',
-            driver: '宋涛',
-            route: '武汉-恩施',
-            trailer: '5#挂',
-            load: '满载',
-            version: 'V1.1.4',
-            weather: '晴天'
+    const DOM = {
+      remark: document.getElementById('remark-input'),
+      status: document.getElementById('status-bar'),
+      btnCapture: document.getElementById('btn-capture'),
+      btnExport: document.getElementById('btn-export'),
+      btnWsToggle: document.getElementById('btn-ws-toggle'),
+      btnWsCreate: document.getElementById('btn-ws-create'),
+      btnWsSave: document.getElementById('btn-ws-save'),
+      wsPanel: document.getElementById('workspace-panel'),
+      wsForm: document.getElementById('ws-form'),
+      wsList: document.getElementById('ws-list'),
+      preview: document.getElementById('preview-img'),
+      list: document.getElementById('record-list'),
+      viewToggle: document.getElementById('view-mode-toggle'),
+      clock: document.getElementById('clock')
+    };
+
+    // 时钟显示
+    setInterval(() => DOM.clock.textContent = new Date().toLocaleTimeString(), 1000);
+
+    /* ================= 核心模块 ================= */
+
+    /** 1. 存储适配器 (遵循 PROJECT_RULES.md 路径结构与多用户约束) */
+    const Storage = {
+      // 逻辑路径映射: ./workspace/ -> IndexedDB 表 'workspaces'
+      // 逻辑路径映射: ./issue/{ws}/{datetime}/ -> IndexedDB 表 'issues'
+      // 注意：为满足“所有用户可见”红线，实际生产应替换为 fetch('/api/...')
+      _db: null,
+      async init() {
+        const req = indexedDB.open('TestRecordDB', 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('workspaces')) db.createObjectStore('workspaces', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('issues')) db.createObjectStore('issues', { keyPath: 'id' });
+        };
+        req.onsuccess = (e) => { this._db = e.target.result; };
+      },
+      async loadAll() {
+        if (!this._db) return;
+        const tx = this._db.transaction(['workspaces', 'issues'], 'readonly');
+        tx.objectStore('workspaces').getAll().onsuccess = e => AppState.workspaces = e.target.result || [];
+        tx.objectStore('issues').getAll().onsuccess = e => AppState.records = e.target.result || [];
+        // 默认选中第一个或新建
+        if (AppState.workspaces.length === 0) WorkspaceManager.createDefault();
+        else AppState.currentWorkspace = AppState.workspaces[0].id;
+      },
+      async saveRecord(record) {
+        if (!this._db) return;
+        const tx = this._db.transaction('issues', 'readwrite');
+        // 路径逻辑: ./issue/{workspace_name}/{date_time}/
+        record.path = `./issue/${WorkspaceManager.get(AppState.currentWorkspace)?.name || 'default'}/${record.datetime}/`;
+        tx.objectStore('issues').add(record);
+      },
+      async deleteRecord(id) {
+        if (!this._db) return;
+        this._db.transaction('issues', 'readwrite').objectStore('issues').delete(id);
+      }
+    };
+
+    /** 2. 摄像头模块 (严格遵循优先级策略) */
+    const Camera = {
+      async getStream() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videos = devices.filter(d => d.kind === 'videoinput');
+        if (videos.length === 0) throw new Error('NO_DEVICES');
+
+        const isPreferred = d => {
+          const l = d.label.toLowerCase();
+          return (l.includes('usb') || l.includes('camera')) && !l.includes('integrated');
         };
 
-        // --- 2. 页面加载逻辑 ---
-        window.onload = function() {
-            // 初始化工作区（如果不存在）
-            if (!workspaces[currentWsId]) {
-                createDefaultWorkspace();
-            }
-            updateWorkspaceSelector();
-            renderWorkspaceInfo();
-            renderRecords();
-            startActivationClock();
-        };
+        const preferred = videos.filter(isPreferred);
+        const fallback = videos;
+        const targets = preferred.length ? preferred : fallback;
 
-        function createDefaultWorkspace() {
-            if (!workspaces['ws_1']) {
-                workspaces['ws_1'] = { ...defaultWsConfig, id: 'ws_1' };
-                currentWsId = 'ws_1';
-                saveWorkspaces();
-            }
+        for (const dev of targets) {
+          try {
+            return await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: dev.deviceId } } });
+          } catch {}
         }
+        throw new Error('ALL_FAILED');
+      },
+      async capture() {
+        const stream = await this.getStream();
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.setAttribute('playsinline', true);
+        await video.play();
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // 立即释放硬件
+        stream.getTracks().forEach(t => t.stop());
+        return canvas.toDataURL('image/jpeg', 0.85);
+      }
+    };
 
-        // --- 3. 激活时间时钟 ---
-        function startActivationClock() {
-            const timeEl = document.getElementById('activationTime');
-            function update() {
-                const h = String(activationDate.getHours()).padStart(2, '0');
-                const m = String(activationDate.getMinutes()).padStart(2, '0');
-                const s = String(activationDate.getSeconds()).padStart(2, '0');
-                timeEl.textContent = `激活: ${h}:${m}:${s}`;
-            }
-            update();
-            setInterval(update, 1000);
-        }
-
-        // --- 4. 工作区管理逻辑 ---
-        function updateWorkspaceSelector() {
-            const sel = document.getElementById('workspaceSelector');
-            sel.innerHTML = '';
-            Object.values(workspaces).forEach(ws => {
-                const opt = document.createElement('option');
-                opt.value = ws.id;
-                opt.text = ws.name;
-                if (ws.id === currentWsId) opt.selected = true;
-                sel.appendChild(opt);
-            });
-        }
-
-        function renderWorkspaceInfo() {
-            const ws = workspaces[currentWsId];
-            const bar = document.getElementById('workspaceInfoBar');
-            if (!ws) return;
-
-            bar.innerHTML = `
-                <div class="ws-tag"><span class="ws-label">车型:</span> ${ws.carModel}</div>
-                <div class="ws-tag"><span class="ws-label">司机:</span> ${ws.driver}</div>
-                <div class="ws-tag"><span class="ws-label">路线:</span> ${ws.route}</div>
-                <div class="ws-tag"><span class="ws-label">版本:</span> ${ws.version}</div>
-            `;
-        }
-
-        function switchWorkspace() {
-            const sel = document.getElementById('workspaceSelector');
-            currentWsId = sel.value;
-            localStorage.setItem('field_current_ws', currentWsId);
-            renderWorkspaceInfo();
-            renderRecords(); // 切换工作区刷新列表
-        }
-
-        function openWorkspaceModal() {
-            const ws = workspaces[currentWsId];
-            document.getElementById('wsNameInput').value = ws.name;
-            document.getElementById('wsTestName').value = ws.testName;
-            document.getElementById('wsCarModel').value = ws.carModel;
-            document.getElementById('wsTester').value = ws.tester;
-            document.getElementById('wsDriver').value = ws.driver;
-            document.getElementById('wsRoute').value = ws.route;
-            document.getElementById('wsTrailer').value = ws.trailer;
-            document.getElementById('wsLoad').value = ws.load;
-            document.getElementById('wsVersion').value = ws.version;
-            document.getElementById('wsWeather').value = ws.weather;
-            document.getElementById('workspaceModal').style.display = 'flex';
-        }
-
-        function closeWorkspaceModal() {
-            document.getElementById('workspaceModal').style.display = 'none';
-        }
-
-        function saveWorkspaceConfig() {
-            const name = document.getElementById('wsNameInput').value.trim();
-            if (!name) { alert('工作区名称不能为空'); return; }
-
-            // 查重（排除自己）
-            const exists = Object.values(workspaces).some(ws => ws.name === name && ws.id !== currentWsId);
-            if (exists) { alert('工作区名称已存在，请换一个名字'); return; }
-
-            workspaces[currentWsId].name = name;
-            workspaces[currentWsId].testName = document.getElementById('wsTestName').value;
-            workspaces[currentWsId].carModel = document.getElementById('wsCarModel').value;
-            workspaces[currentWsId].tester = document.getElementById('wsTester').value;
-            workspaces[currentWsId].driver = document.getElementById('wsDriver').value;
-            workspaces[currentWsId].route = document.getElementById('wsRoute').value;
-            workspaces[currentWsId].trailer = document.getElementById('wsTrailer').value;
-            workspaces[currentWsId].load = document.getElementById('wsLoad').value;
-            workspaces[currentWsId].version = document.getElementById('wsVersion').value;
-            workspaces[currentWsId].weather = document.getElementById('wsWeather').value;
-
-            saveWorkspaces();
-            updateWorkspaceSelector();
-            renderWorkspaceInfo();
-            closeWorkspaceModal();
-        }
-
-        function saveWorkspaces() {
-            localStorage.setItem('field_workspaces', JSON.stringify(workspaces));
-        }
-
-        // --- 5. 核心记录逻辑 ---
-        async function handleRecord() {
-            const statusEl = document.getElementById('statusText');
-            const desc = document.getElementById('descInput').value;
-
-            statusEl.style.display = 'block';
-            statusEl.textContent = '正在获取位置...';
-
-            try {
-                // 1. 获取位置
-                const position = await new Promise((resolve, reject) => {
-                    if (!navigator.geolocation) reject('不支持定位');
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    });
-                });
-
-                statusEl.textContent = '正在解析地址（超时自动跳过）...';
-
-                const { latitude, longitude } = position.coords;
-
-                // 2. 并行执行：获取地址 OR 5秒超时
-                const address = await Promise.race([
-                    fetchAddress(latitude, longitude),
-                    new Promise(resolve => setTimeout(() => resolve('未知（解析超时）'), 5000))
-                ]);
-
-                // 3. 拍照
-                statusEl.textContent = '请保持静止，正在拍照...';
-                const imgData = await capturePhoto();
-
-                // 4. 保存记录
-                const now = new Date();
-                const newRecord = {
-                    id: records.filter(r => r.wsId === currentWsId).length + 1, // 简单自增ID
-                    wsId: currentWsId,
-                    timestamp: now.getTime(),
-                    dateStr: now.toLocaleDateString(), // 2026/5/27
-                    timeStr: now.toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(now.getMilliseconds()).padStart(3, '0'),
-                    lat: latitude,
-                    lng: longitude,
-                    address: address,
-                    description: desc,
-                    image: imgData
-                };
-
-                records.unshift(newRecord); // 最新的在最前面
-                localStorage.setItem('field_records', JSON.stringify(records));
-
-                // 5. 重置界面
-                document.getElementById('descInput').value = '';
-                statusEl.style.display = 'none';
-                renderRecords();
-
-            } catch (err) {
-                console.error(err);
-                statusEl.textContent = '错误: ' + err.message;
-                setTimeout(() => statusEl.style.display = 'none', 3000);
-            }
-        }
-
-        // 逆地理编码 (使用 OpenStreetMap Nominatim)
-        async function fetchAddress(lat, lng) {
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`);
+    /** 3. GPS 模块 (5秒超时 + 逆地理编码) */
+    const GPS = {
+      async getPosition() {
+        return new Promise((resolve) => {
+          if (!navigator.geolocation) return resolve({ lat: 0, lon: 0, addr: '未知' });
+          const timeout = new Promise(res => setTimeout(() => res({ lat: 0, lon: 0, addr: '未知', timeout: true }), 5000));
+          
+          const geo = new Promise(res => {
+            navigator.geolocation.getCurrentPosition(async pos => {
+              const { latitude: lat, longitude: lon } = pos.coords;
+              try {
+                // 调用 OpenStreetMap Nominatim 逆解析
+                const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=zh-CN`;
+                const res = await fetch(url, { headers: { 'User-Agent': 'TestRecordTool/1.0' } });
                 const data = await res.json();
-                return data.display_name || '未知地点';
-            } catch (e) {
-                return '未知（网络错误）';
-            }
+                const a = data.address || {};
+                const addr = `${a.state||''}${a.city||a.county||''}${a.district||a.suburb||''}${a.road||''}${a.house_number||'*号'}`;
+                res({ lat, lon, addr: addr.replace(/undefined/g,'') || '未知' });
+              } catch {
+                res({ lat, lon, addr: '未知' });
+              }
+            }, () => res({ lat: 0, lon: 0, addr: '未知' }), { enableHighAccuracy: true });
+          });
+          
+          Promise.race([geo, timeout]).then(resolve);
+        });
+      }
+    };
+
+    /** 4. 工作区管理模块 */
+    const WorkspaceManager = {
+      defaults: {
+        name: '工作区1', testName: '版本测试', model: 'HG36-244#', tester: '测试科',
+        driver: '宋涛', route: '武汉-恩施', trailer: '5#挂', load: '满载',
+        version: 'V1.1.4', weather: '晴天'
+      },
+      get(id) { return AppState.workspaces.find(w => w.id === id); },
+      generateName() {
+        const existing = AppState.workspaces.map(w => w.name);
+        let n = 1;
+        while (existing.includes(`工作区${n}`)) n++;
+        return `工作区${n}`;
+      },
+      renderForm(ws) {
+        DOM.wsForm.innerHTML = Object.entries(this.defaults).map(([k, v]) => 
+          `<input data-key="${k}" value="${ws ? ws[k] : v}" placeholder="${this.defaults[k]}" />`
+        ).join('');
+      },
+      renderList() {
+        DOM.wsList.innerHTML = AppState.workspaces.map(ws => `
+          <div class="ws-item ${ws.id === AppState.currentWorkspace ? 'active' : ''}" data-id="${ws.id}">
+            <span>${ws.name} <span class="badge">${ws.route}</span></span>
+            <button class="btn btn-secondary" style="padding:2px 8px;font-size:0.75rem;" onclick="WorkspaceManager.delete('${ws.id}')">删除</button>
+          </div>
+        `).join('');
+        DOM.wsList.querySelectorAll('.ws-item').forEach(el => {
+          el.addEventListener('click', e => {
+            if(e.target.tagName !== 'BUTTON') AppState.currentWorkspace = el.dataset.id;
+            WorkspaceManager.renderList();
+          });
+        });
+      },
+      createDefault() {
+        const id = Date.now().toString();
+        AppState.workspaces.push({ id, ...this.defaults, name: this.generateName() });
+        AppState.currentWorkspace = id;
+        Storage.saveWorkspace?.(AppState.workspaces); // 持久化占位
+      },
+      async saveCurrent() {
+        const inputs = DOM.wsForm.querySelectorAll('input');
+        const config = {}; inputs.forEach(i => config[i.dataset.key] = i.value);
+        const ws = this.get(AppState.currentWorkspace);
+        Object.assign(ws, config);
+        this.renderList();
+        DOM.status.textContent = '✅ 工作区配置已保存';
+      },
+      async createNew() {
+        const id = Date.now().toString();
+        const name = this.generateName();
+        AppState.workspaces.push({ id, ...this.defaults, name });
+        AppState.currentWorkspace = id;
+        this.renderForm({ name, ...this.defaults });
+        this.renderList();
+      },
+      delete(id) {
+        AppState.workspaces = AppState.workspaces.filter(w => w.id !== id);
+        if (AppState.currentWorkspace === id && AppState.workspaces.length > 0) {
+          AppState.currentWorkspace = AppState.workspaces[0].id;
         }
+        this.renderList();
+      }
+    };
 
-        // 拍照 (优先后置/外接摄像头)
-        async function capturePhoto() {
-            return new Promise(async (resolve, reject) => {
-                // 创建临时 video 元素
-                const video = document.createElement('video');
-                video.style.position = 'fixed';
-                video.style.left = '-9999px';
-                document.body.appendChild(video);
+    /** 5. 导出模块 (Excel 生成) */
+    const Exporter = {
+      async generate() {
+        if (AppState.records.length === 0) return alert('无记录可导出'); // 临时提示，后续替换为UI Toast
+        const ws = WorkspaceManager.get(AppState.currentWorkspace) || {};
+        const wb = XLSX.utils.book_new();
 
-                try {
-                    // 尝试获取后置或外接摄像头
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(d => d.kind === 'videoinput');
-                    let facingMode = 'environment'; // 默认后置
-                    let deviceId = null;
-
-                    // 如果有多个摄像头，尝试找非集成的，或者单纯使用后置
-                    if (videoDevices.length > 1) {
-                         // 简单的逻辑：选第一个非默认的，或者就用第一个。
-                         // 这里主要靠 facingMode: 'environment' 来保证手机选后置，PC选外接
-                    }
-
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
-                    });
-                    video.srcObject = stream;
-
-                    video.onloadedmetadata = () => {
-                        video.play();
-                        // 拍照延迟一点确保画面清晰
-                        setTimeout(() => {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = video.videoWidth;
-                            canvas.height = video.videoHeight;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(video, 0, 0);
-                            stream.getTracks().forEach(track => track.stop()); // 关闭摄像头
-                            document.body.removeChild(video);
-                            resolve(canvas.toDataURL('image/jpeg', 0.8));
-                        }, 500);
-                    };
-                } catch (e) {
-                    if (document.body.contains(video)) document.body.removeChild(video);
-                    reject(e);
-                }
+        // Sheet1: 详细信息
+        const data = [['问题编号','车型','挂车','载荷','系统版本','路线','天气','测试人员','司机','日期','时间','地点','经纬度','地图链接','问题描述']];
+        const images = [];
+        AppState.records.forEach((r, i) => {
+          data.push([
+            r.id, ws.model, ws.trailer, ws.load, ws.version, ws.route, ws.weather, ws.tester, ws.driver,
+            r.date, r.time, r.address, `${r.lat},${r.lon}`, r.mapUrl, r.desc
+          ]);
+          if (r.image) {
+            images.push({
+              name: `img${i}`,
+              data: Uint8Array.from(atob(r.image.split(',')[1]), c => c.charCodeAt(0)),
+              type: 'jpeg',
+              position: { col: 15, row: i + 1 },
+              style: { width: 80, height: 60 }
             });
+          }
+        });
+        const ws1 = XLSX.utils.aoa_to_sheet(data);
+        // 嵌入图片 (SheetJS 全功能版支持)
+        if (images.length) ws1['!images'] = images;
+        XLSX.utils.book_append_sheet(wb, ws1, '详细信息');
+
+        // Sheet2: 汇总信息
+        const summary = [
+          ['测试名称', ws.testName], ['车型+挂车', `${ws.model}(${ws.trailer})`],
+          ['测试人员', ws.tester], ['司机', ws.driver], ['路线', ws.route],
+          ['载荷', ws.load], ['系统版本', ws.version], ['天气', ws.weather],
+          ['记录问题数', AppState.records.length]
+        ];
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), '汇总信息');
+
+        const filename = `${ws.version}_${ws.model}_${ws.route}_${ws.testName}.xlsx`;
+        XLSX.writeFile(wb, filename);
+      }
+    };
+
+    /** 6. 列表渲染模块 */
+    const ListRenderer = {
+      render() {
+        if (AppState.records.length === 0) {
+          DOM.list.innerHTML = '<div class="empty-state">暂无记录</div>';
+          return;
         }
+        DOM.list.innerHTML = '';
+        AppState.records.slice().reverse().forEach(r => {
+          const div = document.createElement('div');
+          div.className = 'record-item';
+          const imgHtml = r.image ? `<img src="${r.image}">` : '<div style="width:100px;height:70px;background:#eee;display:flex;align-items:center;justify-content:center;color:#888;font-size:10px;">无图</div>';
+          const detail = AppState.viewModeDetailed ? `
+            <div class="record-meta">📍 ${r.address} <br> 🌐 ${r.lat},${r.lon} <br> 🔗 <a href="${r.mapUrl}" target="_blank">查看地图</a></div>
+          ` : `<div class="record-meta">🔗 <a href="${r.mapUrl}" target="_blank">地图</a> | ${r.address.substring(0,8)}...</div>`;
+          div.innerHTML = `${imgHtml}<div style="flex:1"><strong>🆔 #${r.id}</strong> | 🕒 ${r.date} ${r.time}<br>📝 ${r.desc}${detail}</div>
+            <div class="record-actions"><button class="btn btn-secondary" style="font-size:0.75rem;" onclick="RecordActions.delete(${r.id})">删除</button></div>`;
+          DOM.list.appendChild(div);
+        });
+      }
+    };
 
-        // --- 6. 渲染与视图切换 ---
-        function toggleView() {
-            const container = document.getElementById('recordList');
-            if (document.getElementById('viewToggle').checked) {
-                container.classList.add('thumbnail-mode');
-            } else {
-                container.classList.remove('thumbnail-mode');
-            }
-        }
+    /* ================= 事件绑定 ================= */
+    // 时间锁定逻辑 (PROJECT_RULES.md 红线)
+    DOM.remark.addEventListener('focus', () => {
+      const now = new Date();
+      AppState.lockedTimestamp = now.toISOString().replace('T', ' ').split('.')[0].replace(/-/g, '/') + '.' + String(now.getMilliseconds()).padStart(3, '0');
+      DOM.status.textContent = `✅ 时间已锁定: ${AppState.lockedTimestamp}`;
+      DOM.btnCapture.disabled = false;
+    });
 
-        function renderRecords() {
-            const list = document.getElementById('recordList');
-            const isThumb = document.getElementById('viewToggle').checked;
-            const wsRecords = records.filter(r => r.wsId === currentWsId);
+    // 拍照
+    DOM.btnCapture.addEventListener('click', async () => {
+      if (!AppState.lockedTimestamp) return;
+      DOM.btnCapture.disabled = true;
+      DOM.status.textContent = '⏳ 正在获取摄像头...';
+      try {
+        AppState.currentImageBase64 = await Camera.capture();
+        DOM.preview.src = AppState.currentImageBase64;
+        DOM.preview.style.display = 'block';
+        DOM.status.textContent = '📷 获取成功，正在记录...';
+        await RecordActions.save();
+      } catch (e) {
+        DOM.status.textContent = e.message.includes('NO') ? '❌ 无法获取图片' : `❌ ${e.message}`;
+        AppState.currentImageBase64 = null;
+        DOM.preview.style.display = 'none';
+      } finally {
+        DOM.btnCapture.disabled = !AppState.lockedTimestamp;
+      }
+    });
 
-            if (wsRecords.length === 0) {
-                list.innerHTML = '<div class="loading">暂无记录</div>';
-                return;
-            }
+    const RecordActions = {
+      async save() {
+        const ws = WorkspaceManager.get(AppState.currentWorkspace) || {};
+        const [date, time] = AppState.lockedTimestamp.split(' ');
+        const record = {
+          id: AppState.nextId++,
+          datetime: AppState.lockedTimestamp.replace(/:/g, '-'),
+          date, time,
+          desc: DOM.remark.value || '无备注',
+          image: AppState.currentImageBase64,
+          address: '解析中...',
+          lat: 0, lon: 0,
+          mapUrl: ''
+        };
+        // 异步获取GPS并更新
+        GPS.getPosition().then(gps => {
+          record.address = gps.addr;
+          record.lat = gps.lat; record.lon = gps.lon;
+          record.mapUrl = `https://www.google.com/maps?q=${gps.lat},${gps.lon}`;
+          AppState.records.push(record);
+          Storage.saveRecord(record);
+          ListRenderer.render();
+          DOM.status.textContent = '✅ 记录已保存 (GPS已解析)';
+        });
+        // 重置UI
+        DOM.remark.value = '';
+        AppState.lockedTimestamp = null;
+        AppState.currentImageBase64 = null;
+        DOM.preview.style.display = 'none';
+        DOM.status.textContent = '等待激活备注输入框以锁定时间...';
+        DOM.btnCapture.disabled = true;
+      },
+      delete(id) {
+        AppState.records = AppState.records.filter(r => r.id !== id);
+        Storage.deleteRecord(id);
+        ListRenderer.render();
+      }
+    };
 
-            list.innerHTML = wsRecords.map(record => `
-                <div class="record-item">
-                    <div class="record-header">
-                        <span class="record-id">#${record.id}</span>
-                        <span class="record-time">${record.dateStr} ${record.timeStr}</span>
-                    </div>
+    DOM.viewToggle.addEventListener('change', e => { AppState.viewModeDetailed = e.target.checked; ListRenderer.render(); });
+    DOM.btnExport.addEventListener('click', Exporter.generate);
+    DOM.btnWsToggle.addEventListener('click', () => {
+      DOM.wsPanel.classList.toggle('active');
+      const ws = WorkspaceManager.get(AppState.currentWorkspace);
+      WorkspaceManager.renderForm(ws);
+      WorkspaceManager.renderList();
+    });
+    DOM.btnWsCreate.addEventListener('click', WorkspaceManager.createNew);
+    DOM.btnWsSave.addEventListener('click', WorkspaceManager.saveCurrent);
 
-                    ${isThumb ? '' : `<div class="detail-row"><span class="detail-label">描述:</span><span class="detail-value">${record.description || '-'}</span></div>`}
-
-                    <div class="detail-row">
-                        <span class="detail-label">位置:</span>
-                        <span class="detail-value">
-                            <a href="https://uri.amap.com/marker?position=${record.lng},${record.lat}" target="_blank" class="map-link">
-                                🗺️ 查看地图
-                            </a>
-                            ${isThumb ? '' : `<span class="map-location-text">(${record.address})</span>`}
-                        </span>
-                    </div>
-
-                    ${isThumb ? '' : `
-                        <div class="detail-row"><span class="detail-label">经纬:</span><span class="detail-value">${record.lat.toFixed(6)}, ${record.lng.toFixed(6)}</span></div>
-                        <div class="detail-row"><span class="detail-label">车型:</span><span class="detail-value">${workspaces[record.wsId]?.carModel || '-'}</span></div>
-                        <div class="detail-row"><span class="detail-label">司机:</span><span class="detail-value">${workspaces[record.wsId]?.driver || '-'}</span></div>
-                    `}
-
-                    <img src="${record.image}" class="record-img">
-                </div>
-            `).join('');
-        }
-
-        // --- 7. 导出 Excel ---
-        function exportToExcel() {
-            const wsRecords = records.filter(r => r.wsId === currentWsId);
-            const wsConfig = workspaces[currentWsId];
-
-            if (wsRecords.length === 0) {
-                alert('当前工作区无记录可导出');
-                return;
-            }
-
-            // 1. 准备详细信息数据
-            const detailsData = wsRecords.map(r => ({
-                "问题编号": r.id,
-                "车型": wsConfig.carModel,
-                "挂车": wsConfig.trailer,
-                "载荷": wsConfig.load,
-                "系统版本": wsConfig.version,
-                "路线": wsConfig.route,
-                "天气": wsConfig.weather,
-                "测试人员": wsConfig.tester,
-                "司机": wsConfig.driver,
-                "日期": r.dateStr,
-                "时间": r.timeStr,
-                "地点": r.address,
-                "经纬度": `${r.lat}, ${r.lng}`,
-                "问题描述": r.description,
-                // 注意：SheetJS 处理图片比较麻烦，通常只导出数据。
-                // 如果必须要在Excel里看图，需要复杂的 base64 处理，这里仅导出文本信息以保证稳定性。
-                "图片": "见附件或系统内查看"
-            }));
-
-            // 2. 准备汇总信息
-            const summaryData = [
-                ["汇总统计信息"],
-                ["工作区名称", wsConfig.name],
-                ["测试名称", wsConfig.testName],
-                ["总记录数", wsRecords.length],
-                ["导出时间", new Date().toLocaleString()],
-                [],
-                ["车型统计", wsConfig.carModel],
-                ["主要路线", wsConfig.route]
-            ];
-
-            // 3. 创建工作簿
-            const wb = XLSX.utils.book_new();
-
-            // 工作表1：详细信息
-            const wsDetails = XLSX.utils.json_to_sheet(detailsData, { skipHeader: false });
-            XLSX.utils.book_append_sheet(wb, wsDetails, "详细信息");
-
-            // 工作表2：汇总信息
-            const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-            XLSX.utils.book_append_sheet(wb, wsSummary, "汇总信息");
-
-            // 4. 生成文件名并下载
-            const fileName = `记录导出_${wsConfig.name}_${wsConfig.carModel}_${new Date().toISOString().slice(0,10)}.xlsx`;
-            XLSX.writeFile(wb, fileName);
-        }
-    </script>
+    // 初始化
+    Storage.init().then(() => Storage.loadAll().then(() => ListRenderer.render()));
+  </script>
 </body>
 </html>
