@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>测试记录与管理工具</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="toast-container"></div>
+  <div class="container">
+    <header>
+      <h1>测试记录工具</h1>
+      <div id="workspace-panel">
+        <select id="ws-select"><option value="">-- 选择工作区 --</option></select>
+        <button id="btn-new-ws">+ 新建</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="form-section">
+        <label>备注 (聚焦瞬间自动锁定时间)</label>
+        <input type="text" id="remark-input" placeholder="请输入问题描述...">
+        <div id="locked-time" class="meta-info">锁定时间: --</div>
+
+        <div id="device-status">
+          <span id="cam-status">📷 摄像头: 待连接</span>
+          <span id="gps-status">📍 GPS: 待获取</span>
+        </div>
+        <button id="btn-submit">提交记录</button>
+      </section>
+
+      <section id="list-section">
+        <div class="view-toggle">
+          <button id="btn-detail" class="active">详细信息</button>
+          <button id="btn-thumb">缩略图</button>
+        </div>
+        <div id="record-list"></div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
